@@ -96,7 +96,7 @@ spec:
     spec:
       containers:
       - name: web
-        image: dockersamples/k8s-wordsmith-web
+        image: ctael5co/k8s-wordsmith-web
         ports:
         - containerPort: 80
           name: words-web

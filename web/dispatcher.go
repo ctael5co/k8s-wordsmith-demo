@@ -1,66 +1,92 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
-	"log"
-	"math/rand"
-	"net"
-	"net/http"
-	"time"
+    "fmt"
+    "io/ioutil"
+    "log"
+    "math/rand"
+    "net"
+    "net/http"
+    "time"
+
+    "github.com/prometheus/client_golang/prometheus"
+    "github.com/prometheus/client_golang/prometheus/promauto"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+    rand.Seed(time.Now().UnixNano())
 
-	fwd := &forwarder{"words", 8080}
-	http.Handle("/words/", http.StripPrefix("/words", fwd))
-	http.Handle("/", http.FileServer(http.Dir("static")))
 
-	fmt.Println("Listening on port 80")
-	http.ListenAndServe(":80", nil)
+    go func() {
+        http.Handle("/metrics", promhttp.Handler())
+        http.ListenAndServe(":2112", nil)
+    }()
+
+    fwd := &forwarder{"words", 8080}
+    http.Handle("/words/", http.StripPrefix("/words", fwd))
+    http.Handle("/", http.FileServer(http.Dir("static")))
+
+    fmt.Println("Listening on port 80")
+    http.ListenAndServe(":80", nil)
 }
 
 type forwarder struct {
-	host string
-	port int
+    host string
+    port int
 }
 
 func (f *forwarder) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	addrs, err := net.LookupHost(f.host)
-	if err != nil {
-		log.Println("Error", err)
-		http.Error(w, err.Error(), 500)
-		return
-	}
+    // record prom metric
+    recordMetrics()
 
-	log.Printf("%s %d available ips: %v", r.URL.Path, len(addrs), addrs)
-	ip := addrs[rand.Intn(len(addrs))]
-	log.Printf("%s I choose %s", r.URL.Path, ip)
+    addrs, err := net.LookupHost(f.host)
+    if err != nil {
+        log.Println("Error", err)
+        http.Error(w, err.Error(), 500)
+        return
+    }
 
-	url := fmt.Sprintf("http://%s:%d%s", ip, f.port, r.URL.Path)
-	log.Printf("%s Calling %s", r.URL.Path, url)
+    log.Printf("%s %d available ips: %v", r.URL.Path, len(addrs), addrs)
+    ip := addrs[rand.Intn(len(addrs))]
+    log.Printf("%s I choose %s", r.URL.Path, ip)
 
-	if err = copy(url, ip, w); err != nil {
-		log.Println("Error", err)
-		http.Error(w, err.Error(), 500)
-		return
-	}
+
+    url := fmt.Sprintf("http://%s:%d%s", ip, f.port, r.URL.Path)
+    log.Printf("%s Calling %s", r.URL.Path, url)
+
+    if err = copy(url, ip, w); err != nil {
+        log.Println("Error", err)
+        http.Error(w, err.Error(), 500)
+        return
+    }
 }
 
 func copy(url, ip string, w http.ResponseWriter) error {
-	resp, err := http.Get(url)
-	if err != nil {
-		return err
-	}
+    resp, err := http.Get(url)
+    if err != nil {
+        return err
+    }
 
-	w.Header().Set("source", ip)
+    w.Header().Set("source", ip)
 
-	buf, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
+    buf, err := ioutil.ReadAll(resp.Body)
+    if err != nil {
+        return err
+    }
 
-	_, err = w.Write(buf)
-	return err
+    _, err = w.Write(buf)
+    return err
+}
+
+var (
+    opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
+        Name: "web_processed_ops_total",
+        Help: "The total number of processed events",
+  })
+)
+
+func recordMetrics() {
+    log.Printf("Incrementing metric web_processed_ops_total")
+    opsProcessed.Inc()
 }
