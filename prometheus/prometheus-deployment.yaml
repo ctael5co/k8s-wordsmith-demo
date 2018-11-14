@@ -1,0 +1,53 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+    k8s-app: prometheus
+spec:
+  replicas: 1
+  template:
+    metadata:
+      name: prometheus
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      volumes:
+      - name: config-volume
+        configMap:
+          name: prometheus-config
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.2.1
+        args:
+            - --config.file=/etc/config/prometheus.yml
+            - --web.console.libraries=/etc/prometheus/console_libraries
+            - --web.console.templates=/etc/prometheus/consoles
+            - --web.enable-lifecycle
+            # - --storage.tsdb.path=/data
+        ports:
+          - containerPort: 9090
+        readinessProbe:
+          httpGet:
+            path: /-/ready
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        livenessProbe:
+          httpGet:
+            path: /-/healthy
+            port: 9090
+          initialDelaySeconds: 30
+          timeoutSeconds: 30
+        resources:
+          limits:
+            cpu: 200m
+            memory: 1000Mi
+          requests:
+            cpu: 200m
+            memory: 1000M
+        volumeMounts:
+          - name: config-volume
+            mountPath: /etc/config

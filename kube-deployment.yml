@@ -91,6 +91,9 @@ metadata:
 spec:
   template:
     metadata:
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '2112'
       labels:
         app: words-web
     spec:
