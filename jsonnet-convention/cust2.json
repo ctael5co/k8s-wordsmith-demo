@@ -1,0 +1,7 @@
+{
+  "name": "cust2",
+  "prometheus": {
+    "namespace": "prometheus-cust2",
+    "serviceAccount": "prometheus-cust2",
+  }
+}
